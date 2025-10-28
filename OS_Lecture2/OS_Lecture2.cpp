@@ -1,8 +1,19 @@
 ﻿#include <iostream>
 #include "palindrome.h"
+#include <cassert>
 using namespace std;
+void runTests() 
+{
+    assert(palindrome(121));
+    assert(palindrome(0));
+    assert(!palindrome(123));
+    assert(palindrome(12321));
+    assert(!palindrome(12345));
+    cout << "All tests passed!\n";
+}
 int main()
 {
+    runTests();
     try
     {
         int n;

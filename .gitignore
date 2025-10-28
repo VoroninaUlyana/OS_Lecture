@@ -1,0 +1,26 @@
+# Visual Studio temporary files
+.vs/
+*.vcxproj.user
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+Debug/
+Release/
+x64/
+ipch/
+
+# Compiled Object files
+*.obj
+*.o
+
+# Executables
+*.exe
+*.out
+*.app
+
+# Libraries
+*.lib
+*.dll
+*.so
+*.dylib

@@ -39,3 +39,15 @@
 
 # debug information files
 *.dwo
+
+# Visual Studio temporary files
+.vs/
+*.vcxproj.user
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+Debug/
+Release/
+x64/
+ipch/

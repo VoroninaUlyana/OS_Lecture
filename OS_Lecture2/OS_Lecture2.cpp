@@ -3,15 +3,27 @@
 using namespace std;
 int main()
 {
-    int n;
-    cout << "Enter a number: ";
-    cin >> n;
-    if (palindrome(n))
+    try
     {
-        cout << "Palindrome!\n";
+        int n;
+        cout << "Enter a number: ";
+        cin >> n;
+        if (cin.fail()) 
+        { 
+            throw invalid_argument("Invalid input"); 
+        }
+        if (palindrome(n))
+        {
+            cout << n << " Palindrome!\n";
+        }
+        else
+        {
+            cout << n << " Not a palindrome!\n";
+        }
     }
-    else
+    catch (const exception& e)
     {
-        cout << "Not a palindrome!\n";
+        cerr << "Error: " << e.what() << "\n";
     }
+    return 0;
 }

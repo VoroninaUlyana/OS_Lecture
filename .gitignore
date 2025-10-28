@@ -1,12 +1,6 @@
 # Prerequisites
 *.d
 
-# Compiled Object files
-*.slo
-*.lo
-*.o
-*.obj
-
 # Precompiled Headers
 *.gch
 *.pch
@@ -32,11 +26,6 @@
 *.a
 *.lib
 
-# Executables
-*.exe
-*.out
-*.app
-
 # debug information files
 *.dwo
 
@@ -51,3 +40,18 @@ Debug/
 Release/
 x64/
 ipch/
+
+# Compiled Object files
+*.obj
+*.o
+
+# Executables
+*.exe
+*.out
+*.app
+
+# Libraries
+*.lib
+*.dll
+*.so
+*.dylib

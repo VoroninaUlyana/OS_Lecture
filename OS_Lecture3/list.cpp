@@ -25,3 +25,27 @@ Node* reverselist(Node* head)
     }
     return pred;
 }
+void newelem(Node*& head, int value) 
+{
+    Node* newNode = new Node(value);
+    if (!head) 
+    {
+        head = newNode;
+        return;
+    }
+    Node* temp = head;
+    while (temp->ssylka)
+    {
+        temp = temp->ssylka;
+    }
+    temp->ssylka = newNode;
+}
+void clearlist(Node*& head) 
+{
+    while (head) 
+    {
+        Node* temp = head;
+        head = head->ssylka;
+        delete temp;
+    }
+}

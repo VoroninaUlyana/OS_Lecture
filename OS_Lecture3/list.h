@@ -1,5 +1,6 @@
 #pragma once
 #include <iostream>
+#include <cstdlib>
 struct Node 
 {
     int data;
@@ -8,3 +9,5 @@ struct Node
 };
 void printlist(Node* head);
 Node* reverselist(Node* head);
+void newelem(Node*& head, int value);
+void clearlist(Node*& head);

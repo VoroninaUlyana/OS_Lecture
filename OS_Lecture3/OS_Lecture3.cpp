@@ -8,6 +8,9 @@ int main()
     head->ssylka->ssylka = new Node(7);
     cout << "Original list: ";
     printlist(head);
+    head = reverselist(head);
+    cout << "Reversed list: ";
+    printlist(head);
     while (head) 
     {
         Node* temp = head;

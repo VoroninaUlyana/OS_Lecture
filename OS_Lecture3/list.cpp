@@ -11,3 +11,17 @@ void printlist(Node* head)
     }
     cout << endl;
 }
+Node* reverselist(Node* head) 
+{
+    Node* pred = nullptr;
+    Node* curr = head;
+    Node* next = nullptr;
+    while (curr != nullptr) 
+    {
+        next = curr->ssylka;
+        curr->ssylka = pred;
+        pred = curr;
+        curr = next;
+    }
+    return pred;
+}

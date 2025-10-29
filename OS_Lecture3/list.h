@@ -7,3 +7,4 @@ struct Node
     Node(int val) : data(val), ssylka(nullptr) {}
 };
 void printlist(Node* head);
+Node* reverselist(Node* head);

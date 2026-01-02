@@ -57,6 +57,26 @@ public:
         sqlite3_finalize(stmt);
         return res;
     }
+    void updateStatus(int id, string status) 
+    {
+        sqlite3_stmt* stmt;
+        sqlite3_prepare_v2(db, "UPDATE tasks SET status = ? WHERE id = ?;", -1, &stmt, 0);
+        sqlite3_bind_text(stmt, 1, status.c_str(), -1, SQLITE_STATIC);
+        sqlite3_bind_int(stmt, 2, id);
+        sqlite3_step(stmt);
+        sqlite3_finalize(stmt);
+    }
+    void updateFull(int id, string title, string desc, string status) 
+    {
+        sqlite3_stmt* stmt;
+        sqlite3_prepare_v2(db, "UPDATE tasks SET title = ?, description = ?, status = ? WHERE id = ?;", -1, &stmt, 0);
+        sqlite3_bind_text(stmt, 1, title.c_str(), -1, SQLITE_STATIC);
+        sqlite3_bind_text(stmt, 2, desc.c_str(), -1, SQLITE_STATIC);
+        sqlite3_bind_text(stmt, 3, status.c_str(), -1, SQLITE_STATIC);
+        sqlite3_bind_int(stmt, 4, id);
+        sqlite3_step(stmt);
+        sqlite3_finalize(stmt);
+    }
 };
 int main() 
 {
@@ -94,63 +114,41 @@ int main()
         db.removeTask(id);
         return crow::response(204);
         });
-    /*
-    CROW_ROUTE(app, "/tasks/<int>")([](int id) 
-        {
-        lock_guard<mutex> lock(tasks_mutex);
-        for (const auto& t : tasks) 
-        {
-            if (t.id == id) return crow::response(t.to_json().dump());
-        }
-        return crow::response(404, "Task not found");
-        });
-    CROW_ROUTE(app, "/tasks/<int>").methods("PATCH"_method)([](const crow::request& req, int id) 
+    CROW_ROUTE(app, "/tasks/<int>").methods("PATCH"_method)([&db](const crow::request& req, int id) 
         {
         try 
         {
             auto body = json::parse(req.body);
-            lock_guard<mutex> lock(tasks_mutex);
-            for (auto& t : tasks) 
+            if (body.contains("status")) 
             {
-                if (t.id == id) 
-                {
-                    if (body.contains("status")) 
-                    {
-                        t.status = body["status"];
-                    }
-                    return crow::response(200, t.to_json().dump());
-                }
+                db.updateStatus(id, body["status"]);
+                return crow::response(200, "Status updated");
             }
-            return crow::response(404, "Task not found");
-        }
-        catch (...) 
-        {
-            return crow::response(400, "Invalid JSON");
-        }
-        });
-    CROW_ROUTE(app, "/tasks/<int>").methods("PUT"_method)([](const crow::request& req, int id) 
-        {
-        try 
-        {
-            auto body = json::parse(req.body);
-            lock_guard<mutex> lock(tasks_mutex);
-            for (auto& t : tasks) 
-            {
-                if (t.id == id) 
-                {
-                    t.title = body.value("title", t.title);
-                    t.description = body.value("description", t.description);
-                    t.status = body.value("status", t.status);
-                    return crow::response(200, t.to_json().dump());
-                }
-            }
-            return crow::response(404, "Task not found");
+            return crow::response(400, "Missing status");
         }
         catch (...) 
         { 
             return crow::response(400, "Invalid JSON"); 
         }
-        });*/
+        });
+    CROW_ROUTE(app, "/tasks/<int>").methods("PUT"_method)([&db](const crow::request& req, int id) 
+        {
+        try 
+        {
+            auto body = json::parse(req.body);
+            db.updateFull(
+                id,
+                body.value("title", "Updated Title"),
+                body.value("description", ""),
+                body.value("status", "todo")
+            );
+            return crow::response(200, "Task updated");
+        }
+        catch (...) 
+        { 
+            return crow::response(400, "Invalid JSON"); 
+        }
+        });
     app.port(18080).multithreaded().run();
     return 0;
 }

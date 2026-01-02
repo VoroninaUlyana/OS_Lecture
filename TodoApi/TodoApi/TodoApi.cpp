@@ -8,28 +8,80 @@
 #include <iostream>
 using namespace std;
 using json = nlohmann::json;
-struct Task 
+class Storage 
 {
-    int id;
-    string title;
-    string description;
-    string status;
-    json to_json() const 
+    sqlite3* db;
+public:
+    Storage() 
     {
-        return json{ {"id", id}, {"title", title}, {"description", description}, {"status", status} };
+        sqlite3_open("todo.db", &db);
+        sqlite3_exec(db, "CREATE TABLE IF NOT EXISTS tasks (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, description TEXT, status TEXT);", 0, 0, 0);
+    }
+    ~Storage() 
+    { 
+        sqlite3_close(db); 
+    }
+    int add(string t, string d, string s) 
+    {
+        sqlite3_stmt* stmt;
+        sqlite3_prepare_v2(db, "INSERT INTO tasks (title, description, status) VALUES (?, ?, ?);", -1, &stmt, 0);
+        sqlite3_bind_text(stmt, 1, t.c_str(), -1, SQLITE_STATIC);
+        sqlite3_bind_text(stmt, 2, d.c_str(), -1, SQLITE_STATIC);
+        sqlite3_bind_text(stmt, 3, s.c_str(), -1, SQLITE_STATIC);
+        sqlite3_step(stmt);
+        int id = sqlite3_last_insert_rowid(db);
+        sqlite3_finalize(stmt);
+        return id;
+    }
+    json getAll() 
+    {
+        json res = json::array();
+        sqlite3_stmt* stmt;
+        sqlite3_prepare_v2(db, "SELECT * FROM tasks;", -1, &stmt, 0);
+        while (sqlite3_step(stmt) == SQLITE_ROW) 
+        {
+            res.push_back({
+                {"id", sqlite3_column_int(stmt, 0)},
+                {"title", (const char*)sqlite3_column_text(stmt, 1)},
+                {"status", (const char*)sqlite3_column_text(stmt, 3)}
+                });
+        }
+        sqlite3_finalize(stmt);
+        return res;
     }
 };
-vector<Task> tasks;
-mutex tasks_mutex;
-int next_id = 1;
 int main() 
 {
     crow::SimpleApp app;
+    Storage db;
     CROW_ROUTE(app, "/")([]() 
         {
         return "To-Do API is running!";
         });
-    CROW_ROUTE(app, "/tasks").methods("GET"_method)([]() 
+    CROW_ROUTE(app, "/tasks").methods("GET"_method)([&db]() 
+        {
+        return crow::response(db.getAll().dump());
+        });
+    CROW_ROUTE(app, "/tasks").methods("POST"_method)([&db](const crow::request& req) 
+        {
+        try 
+        {
+            auto body = json::parse(req.body);
+            int id = db.add(
+                body.value("title", "Untitled"),
+                body.value("description", ""),
+                body.value("status", "todo")
+            );
+            json res = body;
+            res["id"] = id;
+            return crow::response(201, res.dump());
+        }
+        catch (...) 
+        { 
+            return crow::response(400, "Invalid JSON"); 
+        }
+        });
+    /*CROW_ROUTE(app, "/tasks").methods("GET"_method)([]()
         {
         json res = json::array();
         lock_guard<mutex> lock(tasks_mutex);
@@ -37,27 +89,6 @@ int main()
             res.push_back({ {"id", t.id}, {"title", t.title}, {"status", t.status} });
         }
         return crow::response(res.dump());
-        });
-    CROW_ROUTE(app, "/tasks").methods("POST"_method)([](const crow::request& req) 
-        {
-        try 
-        {
-            auto body = json::parse(req.body);
-            Task t;
-            {
-                lock_guard<std::mutex> lock(tasks_mutex);
-                t.id = next_id++;
-                t.title = body.value("title", "Untitled");
-                t.description = body.value("description", "");
-                t.status = body.value("status", "todo");
-                tasks.push_back(t);
-            }
-            return crow::response(201, t.to_json().dump());
-        }
-        catch (...) 
-        {
-            return crow::response(400, "Invalid JSON");
-        }
         });
     CROW_ROUTE(app, "/tasks/<int>")([](int id) 
         {
@@ -125,7 +156,7 @@ int main()
         { 
             return crow::response(400, "Invalid JSON"); 
         }
-        });
+        });*/
     app.port(18080).multithreaded().run();
     return 0;
 }

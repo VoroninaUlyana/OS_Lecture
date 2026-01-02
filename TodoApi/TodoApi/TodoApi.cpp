@@ -6,6 +6,7 @@
 #include <nlohmann/json.hpp> 
 #include "crow_all.h"
 #include <iostream>
+#include <chrono>
 using namespace std;
 using json = nlohmann::json;
 class Storage 
@@ -96,13 +97,32 @@ public:
         return res;
     }
 };
+struct Middleware : crow::ILocalMiddleware 
+{
+    struct context {};
+    void before_handle(crow::request& req, crow::response& res, context& ctx) 
+    {
+        cout << "[GATEWAY] " << crow::method_name(req.method) << " request to " << req.url << endl;
+        auto api_key = req.get_header_value("X-API-Key");
+        if (api_key != "secret123") 
+        {
+            res.code = 401;
+            res.body = "{\"error\": \"Unauthorized: Invalid API Key\"}";
+            res.end();
+        }
+    }
+    void after_handle(crow::request& req, crow::response& res, context& ctx) 
+    {
+        cout << "[GATEWAY] Completed with status: " << res.code << endl;
+    }
+};
 int main() 
 {
-    crow::SimpleApp app;
+    crow::App<Middleware> app;
     Storage db;
     CROW_ROUTE(app, "/")([]() 
         {
-        return "To-Do API is running!";
+        return "To-Do API is online!";
         });
     CROW_ROUTE(app, "/tasks").methods("GET"_method)([&db]() 
         {

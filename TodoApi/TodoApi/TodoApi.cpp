@@ -7,11 +7,13 @@
 #include "crow_all.h"
 #include <iostream>
 #include <chrono>
+#include <unordered_map>
 using namespace std;
 using json = nlohmann::json;
 class Storage 
 {
     sqlite3* db;
+    unordered_map<int, json> cache;
 public:
     Storage() 
     {
@@ -21,6 +23,10 @@ public:
     ~Storage() 
     { 
         sqlite3_close(db); 
+    }
+    void clearCache(int id) 
+    { 
+        cache.erase(id); 
     }
     int add(string t, string d, string s) 
     {
@@ -36,6 +42,7 @@ public:
     }
     void removeTask(int id) 
     {
+        clearCache(id);
         sqlite3_stmt* stmt;
         sqlite3_prepare_v2(db, "DELETE FROM tasks WHERE id = ?;", -1, &stmt, 0);
         sqlite3_bind_int(stmt, 1, id);
@@ -60,6 +67,7 @@ public:
     }
     void updateStatus(int id, string status) 
     {
+        clearCache(id);
         sqlite3_stmt* stmt;
         sqlite3_prepare_v2(db, "UPDATE tasks SET status = ? WHERE id = ?;", -1, &stmt, 0);
         sqlite3_bind_text(stmt, 1, status.c_str(), -1, SQLITE_STATIC);
@@ -69,6 +77,7 @@ public:
     }
     void updateFull(int id, string title, string desc, string status) 
     {
+        clearCache(id);
         sqlite3_stmt* stmt;
         sqlite3_prepare_v2(db, "UPDATE tasks SET title = ?, description = ?, status = ? WHERE id = ?;", -1, &stmt, 0);
         sqlite3_bind_text(stmt, 1, title.c_str(), -1, SQLITE_STATIC);
@@ -80,6 +89,11 @@ public:
     }
     json getById(int id) 
     {
+        if (cache.count(id)) 
+        {
+            cout << "[CACHE] Hit for ID: " << id << endl;
+            return cache[id];
+        }
         sqlite3_stmt* stmt;
         sqlite3_prepare_v2(db, "SELECT * FROM tasks WHERE id = ?;", -1, &stmt, 0);
         sqlite3_bind_int(stmt, 1, id);
@@ -92,6 +106,7 @@ public:
                 {"description", (const char*)sqlite3_column_text(stmt, 2)},
                 {"status", (const char*)sqlite3_column_text(stmt, 3)}
             };
+            cache[id] = res;
         }
         sqlite3_finalize(stmt);
         return res;
@@ -100,8 +115,19 @@ public:
 struct Middleware : crow::ILocalMiddleware 
 {
     struct context {};
+    chrono::steady_clock::time_point last_request_time;
     void before_handle(crow::request& req, crow::response& res, context& ctx) 
     {
+        auto now = chrono::steady_clock::now();
+        auto diff = chrono::duration_cast<chrono::milliseconds>(now - last_request_time).count();
+        if (diff < 100) 
+        {
+            res.code = 429;
+            res.body = "{\"error\": \"Too Many Requests\"}";
+            res.end();
+            return;
+        }
+        last_request_time = now;
         cout << "[GATEWAY] " << crow::method_name(req.method) << " request to " << req.url << endl;
         auto api_key = req.get_header_value("X-API-Key");
         if (api_key != "secret123") 

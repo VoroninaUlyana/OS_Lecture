@@ -78,6 +78,30 @@ int main()
         }
         return crow::response(404, "Task not found");
         });
+    CROW_ROUTE(app, "/tasks/<int>").methods("PATCH"_method)([](const crow::request& req, int id) 
+        {
+        try 
+        {
+            auto body = json::parse(req.body);
+            lock_guard<mutex> lock(tasks_mutex);
+            for (auto& t : tasks) 
+            {
+                if (t.id == id) 
+                {
+                    if (body.contains("status")) 
+                    {
+                        t.status = body["status"];
+                    }
+                    return crow::response(200, t.to_json().dump());
+                }
+            }
+            return crow::response(404, "Task not found");
+        }
+        catch (...) 
+        {
+            return crow::response(400, "Invalid JSON");
+        }
+        });
     app.port(18080).multithreaded().run();
     return 0;
 }

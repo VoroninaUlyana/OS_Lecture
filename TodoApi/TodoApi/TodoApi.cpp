@@ -121,10 +121,14 @@ public:
 };
 struct Middleware : crow::ILocalMiddleware 
 {
-    struct context {};
+    struct context 
+    {
+        chrono::steady_clock::time_point start_time;
+    };
     chrono::steady_clock::time_point last_request_time;
     void before_handle(crow::request& req, crow::response& res, context& ctx) 
     {
+        ctx.start_time = chrono::steady_clock::now();
         auto now = chrono::steady_clock::now();
         auto diff = chrono::duration_cast<chrono::milliseconds>(now - last_request_time).count();
         if (diff < 100) 
@@ -135,7 +139,7 @@ struct Middleware : crow::ILocalMiddleware
             return;
         }
         last_request_time = now;
-        cout << "[GATEWAY] " << crow::method_name(req.method) << " request to " << req.url << endl;
+        cout << "[METRIC] Incoming: " << crow::method_name(req.method) << " " << req.url << endl;
         auto api_key = req.get_header_value("X-API-Key");
         if (api_key != "secret123") 
         {
@@ -146,7 +150,11 @@ struct Middleware : crow::ILocalMiddleware
     }
     void after_handle(crow::request& req, crow::response& res, context& ctx) 
     {
-        cout << "[GATEWAY] Completed with status: " << res.code << endl;
+        auto end_time = chrono::steady_clock::now();
+        auto duration = chrono::duration_cast<chrono::milliseconds>(end_time - ctx.start_time).count();
+        cout << "[METRIC] Status: " << res.code
+            << " | Time: " << duration << "ms"
+            << " | Method: " << crow::method_name(req.method) << endl;
     }
 };
 void background_worker() 

@@ -1,10 +1,11 @@
 ﻿#define CROW_MAIN
 #define ASIO_STANDALONE
-#include <vector>
+#include <sqlite3.h>
 #include <string>
 #include <mutex>
 #include <nlohmann/json.hpp> 
 #include "crow_all.h"
+#include <iostream>
 using namespace std;
 using json = nlohmann::json;
 struct Task 
@@ -100,6 +101,29 @@ int main()
         catch (...) 
         {
             return crow::response(400, "Invalid JSON");
+        }
+        });
+    CROW_ROUTE(app, "/tasks/<int>").methods("PUT"_method)([](const crow::request& req, int id) 
+        {
+        try 
+        {
+            auto body = json::parse(req.body);
+            lock_guard<mutex> lock(tasks_mutex);
+            for (auto& t : tasks) 
+            {
+                if (t.id == id) 
+                {
+                    t.title = body.value("title", t.title);
+                    t.description = body.value("description", t.description);
+                    t.status = body.value("status", t.status);
+                    return crow::response(200, t.to_json().dump());
+                }
+            }
+            return crow::response(404, "Task not found");
+        }
+        catch (...) 
+        { 
+            return crow::response(400, "Invalid JSON"); 
         }
         });
     app.port(18080).multithreaded().run();

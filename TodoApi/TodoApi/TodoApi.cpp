@@ -33,6 +33,14 @@ public:
         sqlite3_finalize(stmt);
         return id;
     }
+    void removeTask(int id) 
+    {
+        sqlite3_stmt* stmt;
+        sqlite3_prepare_v2(db, "DELETE FROM tasks WHERE id = ?;", -1, &stmt, 0);
+        sqlite3_bind_int(stmt, 1, id);
+        sqlite3_step(stmt);
+        sqlite3_finalize(stmt);
+    }
     json getAll() 
     {
         json res = json::array();
@@ -81,32 +89,18 @@ int main()
             return crow::response(400, "Invalid JSON"); 
         }
         });
-    /*CROW_ROUTE(app, "/tasks").methods("GET"_method)([]()
+    CROW_ROUTE(app, "/tasks/<int>").methods("DELETE"_method)([&db](int id) 
         {
-        json res = json::array();
-        lock_guard<mutex> lock(tasks_mutex);
-        for (const auto& t : tasks) {
-            res.push_back({ {"id", t.id}, {"title", t.title}, {"status", t.status} });
-        }
-        return crow::response(res.dump());
+        db.removeTask(id);
+        return crow::response(204);
         });
+    /*
     CROW_ROUTE(app, "/tasks/<int>")([](int id) 
         {
         lock_guard<mutex> lock(tasks_mutex);
         for (const auto& t : tasks) 
         {
             if (t.id == id) return crow::response(t.to_json().dump());
-        }
-        return crow::response(404, "Task not found");
-        });
-    CROW_ROUTE(app, "/tasks/<int>").methods("DELETE"_method)([](int id) 
-        {
-        lock_guard<mutex> lock(tasks_mutex);
-        auto it = remove_if(tasks.begin(), tasks.end(), [id](const Task& t) { return t.id == id; });
-        if (it != tasks.end()) 
-        {
-            tasks.erase(it, tasks.end());
-            return crow::response(204);
         }
         return crow::response(404, "Task not found");
         });

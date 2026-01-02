@@ -8,8 +8,15 @@
 #include <iostream>
 #include <chrono>
 #include <unordered_map>
+#include <queue>
+#include <thread>
+#include <condition_variable>
 using namespace std;
 using json = nlohmann::json;
+queue<string> message_queue;
+mutex queue_mtx;
+condition_variable queue_cv;
+bool stop_worker = false;
 class Storage 
 {
     sqlite3* db;
@@ -142,10 +149,28 @@ struct Middleware : crow::ILocalMiddleware
         cout << "[GATEWAY] Completed with status: " << res.code << endl;
     }
 };
+void background_worker() 
+{
+    while (true) 
+    {
+        string task_title;
+        {
+            unique_lock<mutex> lock(queue_mtx);
+            queue_cv.wait(lock, [] { return !message_queue.empty() || stop_worker; });
+            if (stop_worker && message_queue.empty()) 
+                break;
+            task_title = message_queue.front();
+            message_queue.pop();
+        }
+        this_thread::sleep_for(chrono::seconds(3));
+        cout << "[WORKER] Background processing finished for task: " << task_title << endl;
+    }
+}
 int main() 
 {
     crow::App<Middleware> app;
     Storage db;
+    thread worker_thread(background_worker);
     CROW_ROUTE(app, "/")([]() 
         {
         return "To-Do API is online!";
@@ -159,13 +184,20 @@ int main()
         try 
         {
             auto body = json::parse(req.body);
+            string title = body.value("title", "Untitled");
             int id = db.add(
-                body.value("title", "Untitled"),
+                title,
                 body.value("description", ""),
                 body.value("status", "todo")
             );
+            {
+                lock_guard<mutex> lock(queue_mtx);
+                message_queue.push(title);
+            }
+            queue_cv.notify_one();
             json res = body;
             res["id"] = id;
+            res["_notice"] = "Task created and queued for processing";
             return crow::response(201, res.dump());
         }
         catch (...) 
@@ -221,5 +253,11 @@ int main()
         return crow::response(res.dump());
         });
     app.port(18080).multithreaded().run();
+    stop_worker = true; 
+    queue_cv.notify_all();
+    if (worker_thread.joinable())
+    {
+        worker_thread.join();
+    }
     return 0;
 }

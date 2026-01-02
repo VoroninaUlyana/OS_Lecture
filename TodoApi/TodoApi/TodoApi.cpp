@@ -77,6 +77,24 @@ public:
         sqlite3_step(stmt);
         sqlite3_finalize(stmt);
     }
+    json getById(int id) 
+    {
+        sqlite3_stmt* stmt;
+        sqlite3_prepare_v2(db, "SELECT * FROM tasks WHERE id = ?;", -1, &stmt, 0);
+        sqlite3_bind_int(stmt, 1, id);
+        json res = json::object();
+        if (sqlite3_step(stmt) == SQLITE_ROW) 
+        {
+            res = {
+                {"id", sqlite3_column_int(stmt, 0)},
+                {"title", (const char*)sqlite3_column_text(stmt, 1)},
+                {"description", (const char*)sqlite3_column_text(stmt, 2)},
+                {"status", (const char*)sqlite3_column_text(stmt, 3)}
+            };
+        }
+        sqlite3_finalize(stmt);
+        return res;
+    }
 };
 int main() 
 {
@@ -148,6 +166,13 @@ int main()
         { 
             return crow::response(400, "Invalid JSON"); 
         }
+        });
+    CROW_ROUTE(app, "/tasks/<int>").methods("GET"_method)([&db](int id) 
+        {
+        json res = db.getById(id);
+        if (res.empty()) 
+            return crow::response(404, "Task not found");
+        return crow::response(res.dump());
         });
     app.port(18080).multithreaded().run();
     return 0;

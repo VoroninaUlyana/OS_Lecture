@@ -21,11 +21,20 @@ class Storage
 {
     sqlite3* db;
     unordered_map<int, json> cache;
+    mutex db_mtx;
 public:
     Storage() 
     {
-        sqlite3_open("todo.db", &db);
-        sqlite3_exec(db, "CREATE TABLE IF NOT EXISTS tasks (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, description TEXT, status TEXT);", 0, 0, 0);
+        if (sqlite3_open("todo.db", &db) != SQLITE_OK) 
+        {
+            cerr << "CRITICAL: Database connection failed!" << endl;
+            throw runtime_error("DB connection error");
+        }
+        const char* sql = "CREATE TABLE IF NOT EXISTS tasks (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, description TEXT, status TEXT);";
+        if (sqlite3_exec(db, sql, 0, 0, 0) != SQLITE_OK) 
+        {
+            cerr << "CRITICAL: Table creation failed!" << endl;
+        }
     }
     ~Storage() 
     { 
@@ -37,18 +46,24 @@ public:
     }
     int add(string t, string d, string s) 
     {
+        lock_guard<mutex> lock(db_mtx);
         sqlite3_stmt* stmt;
         sqlite3_prepare_v2(db, "INSERT INTO tasks (title, description, status) VALUES (?, ?, ?);", -1, &stmt, 0);
         sqlite3_bind_text(stmt, 1, t.c_str(), -1, SQLITE_STATIC);
         sqlite3_bind_text(stmt, 2, d.c_str(), -1, SQLITE_STATIC);
         sqlite3_bind_text(stmt, 3, s.c_str(), -1, SQLITE_STATIC);
-        sqlite3_step(stmt);
+        if (sqlite3_step(stmt) != SQLITE_DONE) 
+        {
+            sqlite3_finalize(stmt);
+            return -1;
+        }
         int id = sqlite3_last_insert_rowid(db);
         sqlite3_finalize(stmt);
         return id;
     }
     void removeTask(int id) 
     {
+        lock_guard<mutex> lock(db_mtx);
         clearCache(id);
         sqlite3_stmt* stmt;
         sqlite3_prepare_v2(db, "DELETE FROM tasks WHERE id = ?;", -1, &stmt, 0);
@@ -58,6 +73,7 @@ public:
     }
     json getAll() 
     {
+        lock_guard<mutex> lock(db_mtx);
         json res = json::array();
         sqlite3_stmt* stmt;
         sqlite3_prepare_v2(db, "SELECT * FROM tasks;", -1, &stmt, 0);
@@ -101,6 +117,7 @@ public:
             cout << "[CACHE] Hit for ID: " << id << endl;
             return cache[id];
         }
+        lock_guard<mutex> lock(db_mtx);
         sqlite3_stmt* stmt;
         sqlite3_prepare_v2(db, "SELECT * FROM tasks WHERE id = ?;", -1, &stmt, 0);
         sqlite3_bind_int(stmt, 1, id);
@@ -131,7 +148,7 @@ struct Middleware : crow::ILocalMiddleware
         ctx.start_time = chrono::steady_clock::now();
         auto now = chrono::steady_clock::now();
         auto diff = chrono::duration_cast<chrono::milliseconds>(now - last_request_time).count();
-        if (diff < 100) 
+        if (diff < 50) 
         {
             res.code = 429;
             res.body = "{\"error\": \"Too Many Requests\"}";
@@ -170,8 +187,15 @@ void background_worker()
             task_title = message_queue.front();
             message_queue.pop();
         }
-        this_thread::sleep_for(chrono::seconds(3));
-        cout << "[WORKER] Background processing finished for task: " << task_title << endl;
+        try 
+        {
+            this_thread::sleep_for(chrono::seconds(3));
+            cout << "[WORKER] Background processing finished for task: " << task_title << endl;
+        }
+        catch (...)
+        {
+            cerr << "[WORKER] Error during background task!" << endl;
+        }
     }
 }
 int main() 

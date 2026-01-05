@@ -236,34 +236,52 @@ int main()
         });
     CROW_ROUTE(app, "/tasks").methods("POST"_method)([&db](const crow::request& req) 
         {
-        try 
+        auto body = nlohmann::json::parse(req.body, nullptr, false); 
+        if (body.is_discarded()) 
         {
-            auto body = json::parse(req.body);
-            string title = body.value("title", "Untitled");
-            int id = db.add(
-                title,
-                body.value("description", ""),
-                body.value("status", "todo")
-            );
-            {
-                lock_guard<mutex> lock(queue_mtx);
-                message_queue.push(title);
-            }
-            queue_cv.notify_one();
-            json res = body;
-            res["id"] = id;
-            res["_notice"] = "Task created and queued for processing";
-            return crow::response(201, res.dump());
+            return send_error(400, "Invalid JSON format");
         }
-        catch (...) 
-        { 
-            return crow::response(400, "Invalid JSON"); 
+        if (!body.contains("title") || body["title"].get<string>().empty()) 
+        {
+            return send_error(400, "Title is required and cannot be empty");
         }
+        string title = body["title"].get<string>();
+        if (title.size() > 100) 
+        {
+            return send_error(400, "Title is too long (max 100 chars)");
+        }
+        string status = body.value("status", "todo");
+        if (!isValidStatus(status)) 
+        {
+            return send_error(400, "Invalid status. Use: todo, in_progress, done");
+        }
+        int id = db.add(title, body.value("description", ""), status);
+        {
+            lock_guard<mutex> lock(queue_mtx);
+            message_queue.push(title);
+        }
+        queue_cv.notify_one();
+        nlohmann::json res = body;
+        res["id"] = id;
+        res["status"] = status;
+        res["_notice"] = "Task created and queued for processing";
+        crow::response crow_res(201, res.dump());
+        crow_res.set_header("Content-Type", "application/json");
+        return crow_res;
         });
     CROW_ROUTE(app, "/tasks/<int>").methods("DELETE"_method)([&db](int id) 
         {
+        if (!db.exists(id)) 
+        {
+            return send_error(404, "Task with this ID does not exist");
+        }
         db.removeTask(id);
-        return crow::response(204);
+        nlohmann::json res;
+        res["message"] = "Task deleted successfully";
+        res["id"] = id;
+        crow::response crow_res(200, res.dump());
+        crow_res.set_header("Content-Type", "application/json");
+        return crow_res;
         });
     CROW_ROUTE(app, "/tasks/<int>").methods("PATCH"_method)([&db](const crow::request& req, int id) 
         {

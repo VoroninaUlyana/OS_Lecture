@@ -53,6 +53,16 @@ public:
     { 
         sqlite3_close(db); 
     }
+    bool exists(int id) 
+    {
+        lock_guard<mutex> lock(db_mtx);
+        sqlite3_stmt* stmt;
+        sqlite3_prepare_v2(db, "SELECT 1 FROM tasks WHERE id = ?;", -1, &stmt, nullptr);
+        sqlite3_bind_int(stmt, 1, id);
+        bool found = (sqlite3_step(stmt) == SQLITE_ROW);
+        sqlite3_finalize(stmt);
+        return found;
+    }
     void clearCache(int id) 
     { 
         cache.erase(id); 

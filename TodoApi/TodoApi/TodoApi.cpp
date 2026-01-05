@@ -160,7 +160,7 @@ public:
         return res;
     }
 };
-struct Middleware : crow::ILocalMiddleware 
+struct Middleware 
 {
     struct context 
     {
@@ -185,8 +185,10 @@ struct Middleware : crow::ILocalMiddleware
         if (api_key != "secret123") 
         {
             res.code = 401;
+            res.set_header("Content-Type", "application/json");
             res.body = "{\"error\": \"Unauthorized: Invalid API Key\"}";
             res.end();
+            return;
         }
     }
     void after_handle(crow::request& req, crow::response& res, context& ctx) 
@@ -290,47 +292,66 @@ int main()
         crow_res.set_header("Content-Type", "application/json");
         return crow_res;
         });
-    CROW_ROUTE(app, "/tasks/<int>").methods("PATCH"_method)([&db](const crow::request& req, int id) 
+    CROW_ROUTE(app, "/tasks/<int>").methods("PATCH"_method)([&db](const crow::request& req, int id)
         {
-        try 
-        {
-            auto body = json::parse(req.body);
+            if (!db.exists(id)) 
+            {
+                return send_error(404, "Task with this ID does not exist");
+            }
+            auto body = nlohmann::json::parse(req.body, nullptr, false);
+            if (body.is_discarded()) 
+            {
+                return send_error(400, "Invalid JSON format");
+            }
             if (body.contains("status")) 
             {
-                db.updateStatus(id, body["status"]);
-                return crow::response(200, "Status updated");
+                string new_status = body["status"].get<string>();
+                if (!isValidStatus(new_status)) 
+                {
+                    return send_error(400, "Invalid status. Use: todo, in_progress, done");
+                }
+                db.updateStatus(id, new_status);
+                nlohmann::json res;
+                res["message"] = "Status updated successfully";
+                res["id"] = id;
+                res["new_status"] = new_status;
+                return crow::response(200, res.dump());
             }
-            return crow::response(400, "Missing status");
-        }
-        catch (...) 
-        { 
-            return crow::response(400, "Invalid JSON"); 
-        }
+            return send_error(400, "Missing 'status' field in request body");
         });
-    CROW_ROUTE(app, "/tasks/<int>").methods("PUT"_method)([&db](const crow::request& req, int id) 
+    CROW_ROUTE(app, "/tasks/<int>").methods("PUT"_method)([&db](const crow::request& req, int id)
         {
-        try 
-        {
-            auto body = json::parse(req.body);
-            db.updateFull(
-                id,
-                body.value("title", "Updated Title"),
-                body.value("description", ""),
-                body.value("status", "todo")
-            );
-            return crow::response(200, "Task updated");
-        }
-        catch (...) 
-        { 
-            return crow::response(400, "Invalid JSON"); 
-        }
+            if (!db.exists(id)) 
+            {
+                return send_error(404, "Task with this ID does not exist");
+            }
+            auto body = nlohmann::json::parse(req.body, nullptr, false);
+            if (body.is_discarded()) 
+            {
+                return send_error(400, "Invalid JSON format");
+            }
+            string title = body.value("title", "");
+            if (title.empty()) 
+                return send_error(400, "Title cannot be empty");
+            if (title.size() > 100) 
+                return send_error(400, "Title is too long");
+            string status = body.value("status", "todo");
+            if (!isValidStatus(status)) 
+                return send_error(400, "Invalid status");
+            db.updateFull(id, title, body.value("description", ""), status);
+            nlohmann::json res;
+            res["message"] = "Task updated successfully";
+            res["id"] = id;
+            return crow::response(200, res.dump());
         });
-    CROW_ROUTE(app, "/tasks/<int>").methods("GET"_method)([&db](int id) 
+    CROW_ROUTE(app, "/tasks/<int>").methods("GET"_method)([&db](int id)
         {
-        json res = db.getById(id);
-        if (res.empty()) 
-            return crow::response(404, "Task not found");
-        return crow::response(res.dump());
+            json res = db.getById(id);
+            if (res.empty()) 
+            {
+                return send_error(404, "Task not found");
+            }
+            return crow::response(200, res.dump());
         });
     app.port(18080).multithreaded().run();
     stop_worker = true; 

@@ -11,6 +11,7 @@
 #include <queue>
 #include <thread>
 #include <condition_variable>
+#include <csignal>
 using namespace std;
 using json = nlohmann::json;
 queue<string> message_queue;
@@ -225,6 +226,12 @@ int main()
 {
     crow::App<Middleware> app;
     Storage db;
+    signal(SIGINT, [](int) 
+        {
+        cout << "\n[SIGNAL] Interrupt received. Shutting down..." << endl;
+        stop_worker = true;
+        queue_cv.notify_all();
+        });
     thread worker_thread(background_worker);
     CROW_ROUTE(app, "/")([]() 
         {

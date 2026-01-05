@@ -17,6 +17,19 @@ queue<string> message_queue;
 mutex queue_mtx;
 condition_variable queue_cv;
 bool stop_worker = false;
+crow::response send_error(int code, const std::string& msg) 
+{
+    nlohmann::json j;
+    j["error"] = msg;
+    j["code"] = code;
+    auto res = crow::response(code, j.dump());
+    res.set_header("Content-Type", "application/json");
+    return res;
+}
+bool isValidStatus(const std::string& s) 
+{
+    return s == "todo" || s == "in_progress" || s == "done";
+}
 class Storage 
 {
     sqlite3* db;
